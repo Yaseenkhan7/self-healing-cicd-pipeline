@@ -1,0 +1,404 @@
+# =============================================================================
+# cicd.yml — Self-Healing CI/CD Pipeline
+#
+# Stages:
+#   1. test        – Lint & unit-test the application
+#   2. build       – Build (and optionally push) the Docker image
+#   3. deploy      – Deploy to the target environment
+#   4. health-gate – Poll the /health endpoint; trigger self-healing on failure
+#   5. self-heal   – AI log analysis → automated rollback or retry
+#   6. notify      – Send Slack alert on completion (success or failure)
+# =============================================================================
+
+name: Self-Healing CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Deployment target environment"
+        required: false
+        default: "staging"
+        type: choice
+        options: [staging, production]
+      force_rollback:
+        description: "Force an immediate rollback (skip deploy)"
+        required: false
+        default: "false"
+        type: boolean
+
+# Cancel any in-flight run for the same branch/PR when a new push arrives.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+  APP_DIR: app
+  DEPLOYMENT_VERSION: ${{ github.sha }}
+  ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
+
+# Default to the least-privilege token for all jobs; individual jobs
+# may expand permissions only as required.
+permissions:
+  contents: read
+
+jobs:
+  # -------------------------------------------------------------------------- #
+  #  1. Test                                                                   #
+  # -------------------------------------------------------------------------- #
+  test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write   # required to upload coverage artifact
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: ${{ env.APP_DIR }}/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r ${{ env.APP_DIR }}/requirements.txt
+
+      - name: Lint with flake8
+        run: |
+          pip install flake8
+          flake8 ${{ env.APP_DIR }} scripts --max-line-length 100 \
+            --extend-ignore E203,W503 --statistics || true
+
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ -v \
+            --cov=${{ env.APP_DIR }} \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage.xml
+          retention-days: 14
+
+  # -------------------------------------------------------------------------- #
+  #  2. Build                                                                  #
+  # -------------------------------------------------------------------------- #
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set image metadata
+        id: meta
+        run: |
+          SHORT_SHA="${{ github.sha }}"
+          SHORT_SHA="${SHORT_SHA:0:7}"
+          echo "tag=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "Image tag: ${SHORT_SHA}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Uncomment and configure to push to a real registry:
+      # - name: Log in to Docker Hub
+      #   uses: docker/login-action@v3
+      #   with:
+      #     username: ${{ secrets.DOCKER_USERNAME }}
+      #     password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build image (no push — demo mode)
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ env.APP_DIR }}
+          push: false
+          tags: |
+            self-healing-demo:latest
+            self-healing-demo:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            DEPLOYMENT_VERSION=${{ steps.meta.outputs.tag }}
+            ENVIRONMENT=${{ env.ENVIRONMENT }}
+
+  # -------------------------------------------------------------------------- #
+  #  3. Deploy                                                                 #
+  # -------------------------------------------------------------------------- #
+  deploy:
+    name: Deploy to ${{ github.event.inputs.environment || 'staging' }}
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event.inputs.force_rollback != 'true'
+    permissions:
+      contents: read
+      actions: write   # required to upload deploy-log artifact
+
+    environment:
+      name: ${{ github.event.inputs.environment || 'staging' }}
+
+    outputs:
+      deploy_status: ${{ steps.deploy.outputs.status }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: ${{ env.APP_DIR }}/requirements.txt
+
+      - name: Install application dependencies
+        run: pip install -r ${{ env.APP_DIR }}/requirements.txt
+
+      - name: Start application (simulated deploy)
+        id: deploy
+        run: |
+          echo "Deploying version ${{ env.DEPLOYMENT_VERSION }} to ${{ env.ENVIRONMENT }} …"
+
+          # Launch the Flask app in the background on port 5000
+          DEPLOYMENT_VERSION="${{ env.DEPLOYMENT_VERSION }}" \
+          ENVIRONMENT="${{ env.ENVIRONMENT }}" \
+          python ${{ env.APP_DIR }}/main.py &
+
+          echo "APP_PID=$!" >> "$GITHUB_ENV"
+          echo "Application PID: $!"
+
+          # Give the process a moment to bind to the port
+          sleep 3
+
+          if kill -0 "$!" 2>/dev/null; then
+            echo "status=success" >> "$GITHUB_OUTPUT"
+            echo "Deploy succeeded."
+          else
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "Deploy failed — process exited immediately." >&2
+            exit 1
+          fi
+
+      - name: Collect initial deploy logs
+        if: always()
+        run: |
+          echo "Deploy completed at $(date -u +%Y-%m-%dT%H:%M:%SZ)" > deploy.log
+          echo "Version: ${{ env.DEPLOYMENT_VERSION }}" >> deploy.log
+          echo "Environment: ${{ env.ENVIRONMENT }}" >> deploy.log
+          echo "Status: ${{ steps.deploy.outputs.status }}" >> deploy.log
+
+      - name: Upload deploy log artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deploy-logs-${{ github.run_id }}
+          path: deploy.log
+          retention-days: 30
+
+  # -------------------------------------------------------------------------- #
+  #  4. Health Gate                                                            #
+  # -------------------------------------------------------------------------- #
+  health-gate:
+    name: Health Gate
+    runs-on: ubuntu-latest
+    needs: deploy
+    permissions:
+      contents: read
+
+    outputs:
+      health_status: ${{ steps.check.outputs.status }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Make health-check script executable
+        run: chmod +x scripts/health_check.sh
+
+      - name: Set up Python & start app for health check
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: ${{ env.APP_DIR }}/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r ${{ env.APP_DIR }}/requirements.txt
+
+      - name: Start application for health-gate check
+        run: |
+          DEPLOYMENT_VERSION="${{ env.DEPLOYMENT_VERSION }}" \
+          ENVIRONMENT="${{ env.ENVIRONMENT }}" \
+          python ${{ env.APP_DIR }}/main.py &
+          echo "APP_PID=$!" >> "$GITHUB_ENV"
+          sleep 3
+
+      - name: Run health check
+        id: check
+        run: |
+          if bash scripts/health_check.sh http://localhost:5000 5 5; then
+            echo "status=healthy" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=unhealthy" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - name: Stop application
+        if: always()
+        run: |
+          if [ -n "${APP_PID:-}" ] && kill -0 "${APP_PID}" 2>/dev/null; then
+            kill "${APP_PID}"
+          fi
+
+  # -------------------------------------------------------------------------- #
+  #  5. Self-Heal                                                              #
+  # -------------------------------------------------------------------------- #
+  self-heal:
+    name: Self-Heal (AI Analysis + Rollback)
+    runs-on: ubuntu-latest
+    needs: health-gate
+    # Only run when the health gate fails
+    if: failure() && needs.health-gate.outputs.health_status == 'unhealthy'
+    permissions:
+      contents: read
+      actions: write   # required to download and upload artifacts
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: ${{ env.APP_DIR }}/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r ${{ env.APP_DIR }}/requirements.txt
+
+      - name: Download deploy logs
+        uses: actions/download-artifact@v4
+        with:
+          name: deploy-logs-${{ github.run_id }}
+          path: logs/
+
+      - name: Run AI log analysis
+        id: ai_analysis
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          echo "Running AI log analysis …"
+          python scripts/log_analyzer.py \
+            --log-file logs/deploy.log \
+            --output analysis_report.json \
+            || true
+
+          # Extract the recommended action using the built-in --get-action flag
+          ACTION=$(python scripts/log_analyzer.py --get-action analysis_report.json 2>/dev/null \
+                   || echo "rollback")
+
+          echo "Recommended action: ${ACTION}"
+          echo "action=${ACTION}" >> "$GITHUB_OUTPUT"
+
+          # Pretty-print the report for the workflow log
+          cat analysis_report.json 2>/dev/null || true
+
+      - name: Upload AI analysis report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ai-analysis-report-${{ github.run_id }}
+          path: analysis_report.json
+          retention-days: 30
+
+      - name: Execute rollback
+        if: steps.ai_analysis.outputs.action == 'rollback' || steps.ai_analysis.outputs.action == ''
+        env:
+          STABLE_VERSION: ${{ vars.STABLE_VERSION || '1.0.0' }}
+          APP_HOST: "http://localhost:5000"
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+        run: |
+          chmod +x scripts/rollback.sh
+          bash scripts/rollback.sh
+
+      - name: Retry deployment
+        if: steps.ai_analysis.outputs.action == 'retry'
+        run: |
+          echo "Retrying deployment of version ${{ env.DEPLOYMENT_VERSION }} …"
+          pip install -r ${{ env.APP_DIR }}/requirements.txt
+          DEPLOYMENT_VERSION="${{ env.DEPLOYMENT_VERSION }}" \
+          ENVIRONMENT="${{ env.ENVIRONMENT }}" \
+          python ${{ env.APP_DIR }}/main.py &
+          sleep 5
+          bash scripts/health_check.sh http://localhost:5000 5 5
+
+  # -------------------------------------------------------------------------- #
+  #  6. Notify                                                                 #
+  # -------------------------------------------------------------------------- #
+  notify:
+    name: Notify
+    runs-on: ubuntu-latest
+    needs: [health-gate, self-heal]
+    if: always()
+    permissions: {}   # no GITHUB_TOKEN access required for Slack notifications
+
+    steps:
+      - name: Determine overall status
+        id: status
+        run: |
+          HEALTH="${{ needs.health-gate.result }}"
+          HEAL="${{ needs.self-heal.result }}"
+
+          if [ "${HEALTH}" = "success" ]; then
+            echo "message=:white_check_mark: Deployment of \`${{ env.DEPLOYMENT_VERSION }}\` to \`${{ env.ENVIRONMENT }}\` succeeded and is healthy." >> "$GITHUB_OUTPUT"
+            echo "color=good" >> "$GITHUB_OUTPUT"
+          elif [ "${HEAL}" = "success" ]; then
+            echo "message=:recycle: Self-healing recovered the deployment of \`${{ env.DEPLOYMENT_VERSION }}\` on \`${{ env.ENVIRONMENT }}\`." >> "$GITHUB_OUTPUT"
+            echo "color=warning" >> "$GITHUB_OUTPUT"
+          else
+            echo "message=:x: Deployment of \`${{ env.DEPLOYMENT_VERSION }}\` to \`${{ env.ENVIRONMENT }}\` FAILED. Manual intervention required." >> "$GITHUB_OUTPUT"
+            echo "color=danger" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Send Slack notification
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+        run: |
+          if [ -z "${SLACK_WEBHOOK}" ]; then
+            echo "SLACK_WEBHOOK not configured — skipping Slack notification."
+            exit 0
+          fi
+          curl --silent --max-time 10 \
+            -X POST -H 'Content-type: application/json' \
+            --data "{\"attachments\":[{\"color\":\"${{ steps.status.outputs.color }}\",\"text\":\"${{ steps.status.outputs.message }}\",\"footer\":\"Run #${{ github.run_number }} | ${{ github.repository }}\"}]}" \
+            "${SLACK_WEBHOOK}" || true
+          echo "Slack notification sent."
+
+      - name: Log final pipeline status
+        run: |
+          echo "Pipeline run #${{ github.run_number }} completed."
+          echo "Health gate  : ${{ needs.health-gate.result }}"
+          echo "Self-heal    : ${{ needs.self-heal.result }}"
+          echo "Message      : ${{ steps.status.outputs.message }}"

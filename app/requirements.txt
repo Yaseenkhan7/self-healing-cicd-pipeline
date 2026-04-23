@@ -1,0 +1,12 @@
+# Core web framework
+Flask==3.0.3
+
+# HTTP client used by health-check and log-analyzer scripts
+requests==2.32.3
+
+# OpenAI SDK for AI-driven log analysis (log_analyzer.py)
+openai==1.35.13
+
+# Used in tests
+pytest==8.2.2
+pytest-cov==5.0.0
