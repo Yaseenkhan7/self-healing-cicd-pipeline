@@ -31,8 +31,6 @@ The whole lifecycle — from a code push to automated recovery — runs inside G
 
 ## Features
 
-|---|---|
-
 - **Automated Health Checks** – Verifies application health after every deployment using the `/health` endpoint.
 - **AI-Powered Log Analysis** – Uses OpenAI GPT to analyze deployment logs and identify the root cause of failures.
 - **Automatic Rollback** – Restores the last stable deployment if the application fails health checks.
