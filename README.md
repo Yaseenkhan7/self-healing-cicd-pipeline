@@ -169,5 +169,3 @@ Pull requests are welcome! For significant changes, please open an issue first t
 5. Open a Pull Request
 
 Please make sure tests pass before submitting (`pytest tests/ -v`).
-
----
