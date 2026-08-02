@@ -54,7 +54,7 @@ self-healing-cicd-pipeline/
 - Python 3.11+
 - Git
 - Docker (optional, for container builds)
-- An OpenAI API key (optional; the analyser has an offline fallback)
+- An OpenAI API key
 
 ### Local Setup
 
