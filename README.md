@@ -173,7 +173,3 @@ Pull requests are welcome! For significant changes, please open an issue first t
 Please make sure tests pass before submitting (`pytest tests/ -v`).
 
 ---
-
-## License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
