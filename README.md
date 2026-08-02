@@ -3,21 +3,6 @@
 This project implements a self-healing CI/CD pipeline using GitHub Actions and AWS. After deployment, automated health checks verify the application. On failure, logs are analyzed using OpenAI, and the pipeline either retries deployment, performs a rollback, or sends a Slack alert based on the diagnosis.
 
 
----
-
-## Overview
-
-Modern microservices deployments fail in ways that are difficult to anticipate. This project implements a **self-healing CI/CD pipeline** that:
-
-1. **Detects failures** automatically through configurable health-check polling after every deployment.
-2. **Collects and analyses logs** from the failed run using an OpenAI-powered root-cause-analysis engine.
-3. **Takes corrective action** — rolling back to a stable version or retrying the deployment — based on the AI's recommendation.
-4. **Notifies stakeholders** in real time via Slack, so the team always knows what happened and why.
-
-The whole lifecycle — from a code push to automated recovery — runs inside GitHub Actions with no external orchestration tools required.
-
----
-
 ## Architecture
 
 ![Self-Healing CI/CD Pipeline Architecture](Architecture.png)
