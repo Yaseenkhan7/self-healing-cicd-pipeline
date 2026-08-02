@@ -1,11 +1,6 @@
 # Self-Healing CI/CD Pipeline
 
-A production-grade demonstration of automated failure detection, AI-driven root-cause analysis, and self-healing deployments — simulating real-world Site Reliability Engineering (SRE) practices with GitHub Actions.
-
-[![CI/CD Pipeline](https://github.com/Yaseenkhan7/self-healing-cicd-pipeline/actions/workflows/cicd.yml/badge.svg)](https://github.com/Yaseenkhan7/self-healing-cicd-pipeline/actions/workflows/cicd.yml)
-[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Code Style: flake8](https://img.shields.io/badge/code%20style-flake8-black)](https://flake8.pycqa.org/)
+This project implements a self-healing CI/CD pipeline using GitHub Actions and AWS. After deployment, automated health checks verify the application. On failure, logs are analyzed using OpenAI, and the pipeline either retries deployment, performs a rollback, or sends a Slack alert based on the diagnosis.
 
 
 ---
