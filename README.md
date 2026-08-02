@@ -26,8 +26,9 @@ The whole lifecycle — from a code push to automated recovery — runs inside G
 ## Architecture
 
 ```
-<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/cd094fef-faf8-4870-a090-44e6e6137514" />
+## Architecture
 
+![Self-Healing CI/CD Pipeline Architecture](Architecture.png)
 ```
 
 ---
