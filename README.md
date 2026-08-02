@@ -43,19 +43,19 @@ The whole lifecycle — from a code push to automated recovery — runs inside G
 self-healing-cicd-pipeline/
 ├── .github/
 │   └── workflows/
-│       └── cicd.yml          # GitHub Actions pipeline definition
+│       └── cicd.yml          
 ├── app/
-│   ├── Dockerfile            # Production-ready container image
-│   ├── main.py               # Flask web application
-│   ├── requirements.txt      # Python dependencies
+│   ├── Dockerfile            
+│   ├── main.py               
+│   ├── requirements.txt      
 │   └── templates/
-│       └── index.html        # Application front-end
+│       └── index.html        
 ├── scripts/
-│   ├── health_check.sh       # Deployment health-gate script
-│   ├── log_analyzer.py       # AI-driven root-cause analysis
-│   └── rollback.sh           # Automated rollback & verification
+│   ├── health_check.sh       
+│   ├── log_analyzer.py       
+│   └── rollback.sh           
 ├── tests/
-│   └── test_app.py           # Application unit & route tests
+│   └── test_app.py           
 ├── .gitignore
 └── README.md
 ```
@@ -74,30 +74,21 @@ self-healing-cicd-pipeline/
 ### Local Setup
 
 ```bash
-# 1. Clone the repository
 git clone https://github.com/Yaseenkhan7/self-healing-cicd-pipeline.git
 cd self-healing-cicd-pipeline
 
-# 2. Create and activate a virtual environment
 python -m venv .venv
 source .venv/bin/activate          # Linux / macOS
 # .venv\Scripts\activate           # Windows
 
-# 3. Install dependencies
 pip install -r app/requirements.txt
 ```
 
 ### Running the Application
 
 ```bash
-# Start the Flask development server
 FLASK_ENV=development python app/main.py
 
-# The app will be available at:
-#   http://localhost:5000       – main page
-#   http://localhost:5000/health   – health check
-#   http://localhost:5000/metrics  – Prometheus metrics
-#   http://localhost:5000/api/status – JSON status
 ```
 
 Or with Docker:
@@ -122,7 +113,6 @@ Expected output:
 tests/test_app.py::TestIndexRoute::test_returns_200             PASSED
 tests/test_app.py::TestHealthEndpoint::test_status_field_is_healthy PASSED
 ...
------------ coverage: 97% -----------
 ```
 
 ---
@@ -134,18 +124,7 @@ tests/test_app.py::TestHealthEndpoint::test_status_field_is_healthy PASSED
 The pipeline defined in `.github/workflows/cicd.yml` runs on every push to `main` or `develop`:
 
 ```
-push → test → build → deploy → health-gate → [self-heal] → notify
 ```
-
-| Stage | Job | Description |
-|---|---|---|
-| 1 | `test` | `flake8` lint + `pytest` unit tests with coverage upload |
-| 2 | `build` | Docker build via `docker/build-push-action` (image push optional) |
-| 3 | `deploy` | Starts the application on the runner; collects initial deploy logs |
-| 4 | `health-gate` | Runs `health_check.sh`; fails the workflow if the service is unhealthy |
-| 5 | `self-heal` | Triggered **only** on health-gate failure — runs AI analysis and acts |
-| 6 | `notify` | Sends a Slack message indicating success, self-healing, or unrecoverable failure |
-
 ### Self-Healing Flow
 
 When `health-gate` fails, the `self-heal` job:
