@@ -33,14 +33,16 @@ The whole lifecycle — from a code push to automated recovery — runs inside G
 
 | Feature | Description |
 |---|---|
-| 🔍 **Health-Check Polling** | `scripts/health_check.sh` polls `/health` with configurable retries before declaring a deployment unhealthy |
-| 🤖 **AI Root-Cause Analysis** | `scripts/log_analyzer.py` sends logs to OpenAI GPT and returns a structured JSON report with a recommended action |
-| ♻️ **Automated Rollback** | `scripts/rollback.sh` reverts the service to the last known-good version and verifies recovery |
-| 🔁 **Smart Retry** | The pipeline retries a deployment when the AI identifies a transient fault (e.g., a connection blip) |
-| 📣 **Slack Alerts** | Real-time notifications for deployment success, self-healing activation, and unrecoverable failures |
-| 🐳 **Docker-Ready** | A production-quality `Dockerfile` with a non-root user, build-arg injection, and a built-in `HEALTHCHECK` |
-| 📊 **Metrics Endpoint** | A Prometheus-compatible `/metrics` endpoint for integration with Grafana / Alertmanager |
-| ✅ **Full Test Suite** | 100% route coverage with `pytest` and `pytest-cov` |
+## ✨ Features
+
+- **Automated Health Checks** – Verifies application health after every deployment using the `/health` endpoint.
+- **AI-Powered Log Analysis** – Uses OpenAI GPT to analyze deployment logs and identify the root cause of failures.
+- **Automatic Rollback** – Restores the last stable deployment if the application fails health checks.
+- **Smart Deployment Retry** – Retries deployments automatically when failures are identified as temporary.
+- **Slack Notifications** – Sends real-time alerts for successful deployments, recovery actions, and failures.
+- **Dockerized Application** – Runs the application in a secure Docker container with built-in health checks.
+- **Prometheus Metrics** – Exposes a `/metrics` endpoint for monitoring with Prometheus and Grafana.
+- **Automated Testing** – Runs unit tests with `pytest` and `pytest-cov` before deployment to ensure code quality.
 
 ---
 
