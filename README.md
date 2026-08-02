@@ -108,8 +108,6 @@ tests/test_app.py::TestHealthEndpoint::test_status_field_is_healthy PASSED
 
 The pipeline defined in `.github/workflows/cicd.yml` runs on every push to `main` or `develop`:
 
-```
-```
 ### Self-Healing Flow
 
 When `health-gate` fails, the `self-heal` job:
