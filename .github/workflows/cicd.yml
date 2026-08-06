@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run tfsec
-        uses: aelsabbahy/tfsec-action@v1
+        uses: aquasecurity/tfsec-action@v1.0.3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run trivy on Dockerfile
