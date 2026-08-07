@@ -18,11 +18,19 @@ jobs:
   security:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Run tfsec
-        uses: aquasecurity/tfsec-action@v1
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install tfsec
+        run: |
+          set -euo pipefail
+          curl -sSL https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
+
+      - name: Run tfsec (IaC scan)
+        run: |
+          set -euo pipefail
+          tfsec infra/terraform
+
       - name: Run trivy on Dockerfile
         uses: aquasecurity/trivy-action@v0.12.0
         with:
@@ -67,7 +75,7 @@ jobs:
         uses: aquasecurity/trivy-action@v0.12.0
         with:
           image: ${{ secrets.ECR_REPOSITORY }}:${{ steps.build.outputs.IMAGE_TAG }}
-          format: 'table'
+          format: table
 
       - name: Push image
         run: |
