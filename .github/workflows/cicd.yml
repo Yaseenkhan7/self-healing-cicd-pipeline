@@ -21,43 +21,48 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install tfsec
+      - name: Install dependencies (tfsec + jq)
         run: |
           set -euo pipefail
+          # Install tfsec (from upstream script)
           curl -sSL https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
+          # Ensure jq is available for JSON parsing
+          sudo apt-get update -y
+          sudo apt-get install -y jq
 
-      - name: Run tfsec (IaC scan) and save JSON report
+      - name: Run tfsec (IaC scan) and produce JSON report
         run: |
           set -euo pipefail
-          # Run tfsec and always produce JSON output even if tfsec exits non-zero
+          # Run tfsec and always output JSON (tfsec exits non-zero when findings exist)
           tfsec infra/terraform --format json --out tfsec-report.json || true
-          # Summarize and count HIGH + CRITICAL findings
-          COUNT=$(jq '[.results[] | select(.severity=="CRITICAL" or .severity=="HIGH")] | length' tfsec-report.json)
-          echo "tfsec high+critical count: $COUNT"
-          # Upload report for review (artifact upload step below will handle it)
-          echo "TFSEC_COUNT=$COUNT" >> $GITHUB_OUTPUT
+          echo "tfsec report written to tfsec-report.json"
 
-      - name: Upload tfsec JSON report
+      - name: Upload tfsec JSON report (artifact)
         uses: actions/upload-artifact@v4
         with:
           name: tfsec-report
           path: tfsec-report.json
 
-      - name: Fail job on HIGH/CRITICAL tfsec findings
+      - name: Fail job only on HIGH/CRITICAL tfsec findings
         run: |
           set -euo pipefail
-          # read count if available from previous step output or the report
-          if [ -n "${{ steps.upload-tfsec-report.outcome || '' }}" ]; then
-            :
-          fi
-          COUNT=$(jq '[.results[] | select(.severity=="CRITICAL" or .severity=="HIGH")] | length' tfsec-report.json)
-          if [ "$COUNT" -gt 0 ]; then
-            echo "tfsec found HIGH/CRITICAL issues ($COUNT). Failing the job."
-            jq '.results[] | select(.severity=="CRITICAL" or .severity=="HIGH") | {rule_id:.rule_id,severity:.severity,summary:.summary,location:.location}' tfsec-report.json
+          # If the report is missing, treat as failure to be safe
+          if [ ! -f tfsec-report.json ]; then
+            echo "tfsec-report.json not found; failing security job"
             exit 1
           fi
+          # Count HIGH + CRITICAL findings
+          COUNT=$(jq '[.results[] | select(.severity=="CRITICAL" or .severity=="HIGH")] | length' tfsec-report.json)
+          echo "High+Critical tfsec findings: $COUNT"
+          if [ "$COUNT" -gt 0 ]; then
+            echo "---- HIGH / CRITICAL tfsec findings ----"
+            jq '.results[] | select(.severity=="CRITICAL" or .severity=="HIGH") | {rule_id:.rule_id,severity:.severity,summary:.summary,location:.location}' tfsec-report.json
+            echo "Failing security job due to HIGH/CRITICAL tfsec findings"
+            exit 1
+          fi
+          echo "No HIGH/CRITICAL tfsec findings — continuing workflow"
 
-      - name: Run trivy on Dockerfile (optional IaC/app check)
+      - name: Run trivy on Dockerfile (optional)
         uses: aquasecurity/trivy-action@v0.12.0
         with:
           scan-type: fs
