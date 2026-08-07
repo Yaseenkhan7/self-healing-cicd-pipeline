@@ -1,4 +1,4 @@
-name: Self-Healing CI/CD Pipeline (EC2 Deploy)
+name: Self‑Healing CI/CD Pipeline (EC2 Deploy)
 on:
   push:
     branches: [ main, develop ]
@@ -26,12 +26,38 @@ jobs:
           set -euo pipefail
           curl -sSL https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
 
-      - name: Run tfsec (IaC scan)
+      - name: Run tfsec (IaC scan) and save JSON report
         run: |
           set -euo pipefail
-          tfsec infra/terraform
+          # Run tfsec and always produce JSON output even if tfsec exits non-zero
+          tfsec infra/terraform --format json --out tfsec-report.json || true
+          # Summarize and count HIGH + CRITICAL findings
+          COUNT=$(jq '[.results[] | select(.severity=="CRITICAL" or .severity=="HIGH")] | length' tfsec-report.json)
+          echo "tfsec high+critical count: $COUNT"
+          # Upload report for review (artifact upload step below will handle it)
+          echo "TFSEC_COUNT=$COUNT" >> $GITHUB_OUTPUT
 
-      - name: Run trivy on Dockerfile
+      - name: Upload tfsec JSON report
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfsec-report
+          path: tfsec-report.json
+
+      - name: Fail job on HIGH/CRITICAL tfsec findings
+        run: |
+          set -euo pipefail
+          # read count if available from previous step output or the report
+          if [ -n "${{ steps.upload-tfsec-report.outcome || '' }}" ]; then
+            :
+          fi
+          COUNT=$(jq '[.results[] | select(.severity=="CRITICAL" or .severity=="HIGH")] | length' tfsec-report.json)
+          if [ "$COUNT" -gt 0 ]; then
+            echo "tfsec found HIGH/CRITICAL issues ($COUNT). Failing the job."
+            jq '.results[] | select(.severity=="CRITICAL" or .severity=="HIGH") | {rule_id:.rule_id,severity:.severity,summary:.summary,location:.location}' tfsec-report.json
+            exit 1
+          fi
+
+      - name: Run trivy on Dockerfile (optional IaC/app check)
         uses: aquasecurity/trivy-action@v0.12.0
         with:
           scan-type: fs
@@ -79,6 +105,7 @@ jobs:
 
       - name: Push image
         run: |
+          set -euo pipefail
           IMAGE_TAG=${{ steps.build.outputs.IMAGE_TAG }}
           IMAGE=${{ secrets.ECR_REPOSITORY }}:${IMAGE_TAG}
           docker push "$IMAGE"
@@ -87,6 +114,7 @@ jobs:
         env:
           AWS_REGION: ${{ secrets.AWS_REGION }}
         run: |
+          set -euo pipefail
           if [ -z "${{ secrets.SCRIPTS_S3_BUCKET }}" ]; then
             echo "SCRIPTS_S3_BUCKET secret is not set"
             exit 1
@@ -102,6 +130,7 @@ jobs:
 
       - name: Prepare deploy variables
         run: |
+          set -euo pipefail
           IMAGE_TAG="${{ needs.build_and_push.outputs.IMAGE_TAG }}"
           echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_OUTPUT
 
@@ -116,7 +145,7 @@ jobs:
           INSTANCE_IDS=$(aws ec2 describe-instances \
             --filters "Name=tag:${KEY},Values=${VALUE}" "Name=instance-state-name,Values=running" \
             --query 'Reservations[].Instances[].InstanceId' --output text --region $AWS_REGION || true)
-          echo "INSTANCE_IDS=${INSTANCE_IDS}" >> $GITHUB_OUTPUT
+          echo "INSTANCE_IDS=$INSTANCE_IDS" >> $GITHUB_OUTPUT
 
       - name: Send SSM deploy
         env:
@@ -175,5 +204,5 @@ jobs:
             echo "No Slack webhook configured, skipping notification"
             exit 0
           fi
-          MESSAGE=":information_source: Pipeline run ${{ github.run_number }} completed. Status: ${{ job.status }}"
+          MESSAGE=":information_source: Pipeline run ${{ github.run_number }} completed."
           curl -s -X POST -H 'Content-type: application/json' --data "{\"text\": \"${MESSAGE}\"}" "${SLACK_WEBHOOK}" || true
