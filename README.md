@@ -1,6 +1,6 @@
 # Self-Healing CI/CD Pipeline
 
-This project implements a self healing cicd pipeline that combines Infrastructure as Code, CI/CD automation, containerization, and AI-assisted operations. Using Terraform, GitHub Actions, Docker, the pipeline provisions cloud infrastructure, deploys applications to EC2, performs automated testing and security scanning, verifies deployment health, and automatically recovers from failures through intelligent retry or rollback mechanisms powered by deployment log analysis.
+This project implements a self healing cicd pipeline that combines Infrastructure as Code, CI/CD automation, containerization, and AI-assisted operations. Using Terraform, GitHub Actions, Docker, the pipeline provisions cloud infrastructure, deploys applications to EC2, performs automated testing and security scanning, verifies deployment health, and automatically recovers from failures through retry or rollback mechanisms powered by deployment log analysis.
 
 ## Architecture
 
