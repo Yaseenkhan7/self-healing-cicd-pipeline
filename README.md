@@ -1,7 +1,6 @@
 # Self-Healing CI/CD Pipeline
 
-This project implements a self-healing CI/CD pipeline using GitHub Actions and AWS. After deployment, automated health checks verify the application. On failure, logs are analyzed using OpenAI, and the pipeline either retries deployment, performs a rollback, or sends a Slack alert based on the diagnosis.
-
+This project implements a self healing cicd pipeline that combines Infrastructure as Code, CI/CD automation, containerization, and AI-assisted operations. Using Terraform, GitHub Actions, Docker, the pipeline provisions cloud infrastructure, deploys applications to EC2, performs automated testing and security scanning, verifies deployment health, and automatically recovers from failures through intelligent retry or rollback mechanisms powered by deployment log analysis.
 
 ## Architecture
 
@@ -11,14 +10,16 @@ This project implements a self-healing CI/CD pipeline using GitHub Actions and A
 
 ## Features
 
-- **Automated Health Checks** – Verifies application health after every deployment using the `/health` endpoint.
-- **AI-Powered Log Analysis** – Uses OpenAI GPT to analyze deployment logs and identify the root cause of failures.
-- **Automatic Rollback** – Restores the last stable deployment if the application fails health checks.
-- **Smart Deployment Retry** – Retries deployments automatically when failures are identified as temporary.
-- **Slack Notifications** – Sends real-time alerts for successful deployments, recovery actions, and failures.
-- **Dockerized Application** – Runs the application in a secure Docker container with built-in health checks.
-- **Prometheus Metrics** – Exposes a `/metrics` endpoint for monitoring with Prometheus and Grafana.
-- **Automated Testing** – Runs unit tests with `pytest` and `pytest-cov` before deployment to ensure code quality.
+- **Infrastructure as Code** – Provisions AWS infrastructure using Terraform for consistent and repeatable deployments.
+- **Automated CI/CD Pipeline** – Builds, tests, scans, and deploys the application automatically using GitHub Actions.
+- **Containerized Deployment** – Packages the application with Docker for consistent execution across environments.
+- **Security Scanning** – Performs automated vulnerability scanning using Trivy before deployment.
+- **Automated Testing** – Runs unit tests with Pytest to validate application functionality before release.
+- **Health Monitoring** – Verifies application availability through automated post-deployment health checks.
+- **AI-Assisted Log Analysis** – Uses the OpenAI API to analyze deployment logs and identify the root cause of failures.
+- **Self-Healing Recovery** – Automatically retries failed deployments or rolls back to the last stable version based on AI recommendations.
+- **AWS EC2 Deployment** – Deploys containerized applications to Amazon EC2 using AWS Systems Manager (SSM).
+- **Real-Time Notifications** – Sends deployment status and recovery updates to Slack for operational visibility.
 
 ---
 
@@ -28,79 +29,22 @@ This project implements a self-healing CI/CD pipeline using GitHub Actions and A
 self-healing-cicd-pipeline/
 ├── .github/
 │   └── workflows/
-│       └── cicd.yml          
+│       └── cicd.yml
+├── terraform/
 ├── app/
-│   ├── Dockerfile            
-│   ├── main.py               
-│   ├── requirements.txt      
-│   └── templates/
-│       └── index.html        
+│   ├── main.py
+│   ├── templates/
+│   └── requirements.txt
 ├── scripts/
-│   ├── health_check.sh       
-│   ├── log_analyzer.py       
-│   └── rollback.sh           
+│   ├── health_check.sh
+│   ├── log_analyzer.py
+│   └── rollback.sh
 ├── tests/
-│   └── test_app.py           
-├── .gitignore
-└── README.md
+├── Dockerfile
+├── requirements.txt
+├── README.md
+└── LICENSE
 ```
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- Python 3.11+
-- Git
-- Docker (optional, for container builds)
-- An OpenAI API key
-
-### Local Setup
-
-```bash
-git clone https://github.com/Yaseenkhan7/self-healing-cicd-pipeline.git
-cd self-healing-cicd-pipeline
-
-python -m venv .venv
-source .venv/bin/activate          # Linux / macOS
-# .venv\Scripts\activate           # Windows
-
-pip install -r app/requirements.txt
-```
-
-### Running the Application
-
-```bash
-FLASK_ENV=development python app/main.py
-
-```
-
-Or with Docker:
-
-```bash
-docker build -t self-healing-demo ./app
-docker run -p 5000:5000 \
-  -e DEPLOYMENT_VERSION=1.0.0 \
-  -e ENVIRONMENT=local \
-  self-healing-demo
-```
-
-### Running Tests
-
-```bash
-pytest tests/ -v --cov=app --cov-report=term-missing
-```
-
-Expected output:
-
-```
-tests/test_app.py::TestIndexRoute::test_returns_200             PASSED
-tests/test_app.py::TestHealthEndpoint::test_status_field_is_healthy PASSED
-...
-```
-
----
 
 ## CI/CD Pipeline
 
