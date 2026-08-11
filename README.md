@@ -95,8 +95,8 @@ When `OPENAI_API_KEY` is not set (or the API is unreachable), the script automat
 
 Slack notifications are sent at two points in the pipeline:
 
-1. **End of pipeline** (`notify` job) — reports success, self-healing recovery, or unrecoverable failure.
-2. **During rollback** (`rollback.sh`) — sends an alert when rollback starts and when it completes.
+1. **End of pipeline** (`notify` job) - reports success, self-healing recovery, or unrecoverable failure.
+2. **During rollback** (`rollback.sh`) - sends an alert when rollback starts and when it completes.
 
 To enable Slack alerts, add your incoming-webhook URL as the `SLACK_WEBHOOK` secret. You can create a webhook at [api.slack.com/messaging/webhooks](https://api.slack.com/messaging/webhooks).
 
